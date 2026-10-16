@@ -24,6 +24,9 @@ QR ─► https://xv-sofia.github.io/   docs/index.html (GitHub Pages, estática
 - `text/plain` y sin `xhr.upload.onprogress`: cualquiera de las dos cosas contrarias dispara un
   preflight CORS que Apps Script no responde. Por eso no hay porcentaje por foto, solo
   "Subiendo…" + contador.
+- Cada intento de subida tiene tope de espera (60 s + 8 s/MB) con `AbortController`: sin él,
+  una conexión colgada dejaba al invitado en "Subiendo…" para siempre (pasó en una prueba real).
+  Si el tope corta algo que sí se guardó, el reintento duplica la foto: preferible a perderla.
 - Se suben originales, sin comprimir. El nombre del invitado (opcional) crea una subcarpeta; el
   `LockService` evita carpetas duplicadas cuando llegan dos subidas del mismo nombre a la vez.
 
@@ -42,9 +45,13 @@ QR ─► https://xv-sofia.github.io/   docs/index.html (GitHub Pages, estática
 - [x] Página, Apps Script y QR escritos. QR generado y decodificado OK con la URL de Pages.
 - [x] Página probada en navegador a 390 px con `fetch` simulado: subida, rechazo del servidor
       (no reintenta), PDF y archivo >35 MB rechazados en el cliente, reintento ante corte de red.
-- [x] Carpeta de Drive creada; su ID ya está en `Codigo.gs`. Carpeta y Apps Script viven en una
-      cuenta de Gmail dedicada a la fiesta (no la personal de Kevin); permisos autorizados y
-      `probarCarpeta()` OK.
+- [x] Migrado a una cuenta de **Google Workspace** (la Gmail gratis original daba poco
+      espacio). Workspace sí permitió "Acceso: Cualquier usuario" (probado con curl sin sesión).
+      `ID_CARPETA` y `URL_SCRIPT` apuntan a la cuenta nueva; subida real desde la página OK.
+- [ ] Workspace comparte el espacio entre toda la organización: ponerle a la cuenta de la fiesta
+      un **tope de almacenamiento propio** (admin.google.com → Almacenamiento) para que un
+      aluvión de videos no llene el espacio de todos.
+- [ ] Archivar la implementación del Apps Script en la cuenta Gmail vieja.
 - [x] Apps Script desplegado (implementación `v1`) y su URL `/exec` puesta en `URL_SCRIPT`.
       Probado con curl: GET ok, imagen guardada, PDF y archivo vacío rechazados, CORS
       `access-control-allow-origin: *` en la redirección y en la respuesta final. Subida real
@@ -52,10 +59,20 @@ QR ─► https://xv-sofia.github.io/   docs/index.html (GitHub Pages, estática
       subcarpeta "Prueba Claude" de Drive: borrarla antes de la fiesta.
 - [x] Publicado en Pages desde `main` + `/docs` (Pages solo publica desde la raíz o `/docs`;
       por eso la página no está en `web/`). Primero estuvo en `KevinGuerrero8/xv-sofia`.
-- [ ] Mover el repo a la organización `xv-sofia` como `xv-sofia.github.io` y probar la URL
-      nueva. El QR en `salida/` YA apunta a `https://xv-sofia.github.io/`.
+- [x] Repo movido a `xv-sofia/xv-sofia.github.io` (Pages se trasladó solo). Subida real desde
+      `https://xv-sofia.github.io/` OK; el QR de `salida/` apunta ahí (versión 3).
 - [ ] Prueba real de punta a punta desde celulares (Android + iPhone, HEIC, video) **antes de
       imprimir**.
+
+## Lo que rompería el QR impreso (no hacer)
+
+El QR es estático (la URL va en los píxeles, sin servicio intermedio ni límite de escaneos).
+Lo único irrecuperable es perder la URL `https://xv-sofia.github.io/`:
+- borrar o renombrar la organización `xv-sofia` o el repo `xv-sofia.github.io`;
+- poner el repo **privado** (Pages gratis solo sirve repos públicos);
+- borrar la cuenta `KevinGuerrero8` mientras sea la única dueña de la organización.
+Cualquier falla del backend (Apps Script, Drive lleno, cuenta de Google) se arregla editando la
+página, sin reimprimir.
 
 ## Límites conocidos
 

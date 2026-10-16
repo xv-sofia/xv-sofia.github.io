@@ -10,7 +10,7 @@
  */
 
 // ID de la carpeta "XV Sofía – Fotos de invitados" (lo que va después de /folders/ en la URL).
-const ID_CARPETA = '1SwZBM51J5RsVjJdRDbTVlfhJO8FBKHvD';
+const ID_CARPETA = '1gZ3lZl8M1W6d32cWe7gbKj6TtNuGNvWC';
 
 // Base64 infla ~33 %; Apps Script corta las peticiones cerca de 50 MB. 35 MB reales ≈ 47 MB.
 const TAMANO_MAXIMO_BYTES = 35 * 1024 * 1024;

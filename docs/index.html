@@ -165,11 +165,16 @@
 
 <script>
   // URL del Apps Script desplegado como aplicación web (termina en /exec).
-  const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbwaPaeEzt87759sgYogVevf1qc8sWMLX8tTVU1PSn63fqVi7id1Ljz8JXs6l7GPnY_u/exec';
+  const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbxQXxGoEUlw3RHM82ynzjS4xzaG9tZwPJfBTEbTOn2ZwjfZtrQusHr1U4N7z_7T53iuQw/exec';
 
   // Debe coincidir con TAMANO_MAXIMO_BYTES de apps-script/Codigo.gs.
   const TAMANO_MAXIMO_BYTES = 35 * 1024 * 1024;
   const INTENTOS = 3;
+
+  // Sin tope, una conexión colgada deja al invitado en "Subiendo…" para siempre y el reintento
+  // nunca llega. El tope crece con el tamaño: 8 s por MB cubre una subida móvil de ~1 Mbps.
+  const ESPERA_BASE_MS = 60 * 1000;
+  const ESPERA_POR_MB_MS = 8 * 1000;
 
   // Algunos navegadores dejan file.type vacío (sobre todo con HEIC); lo deducimos de la extensión.
   const TIPOS_POR_EXTENSION = {
@@ -275,14 +280,33 @@
 
   // text/plain mantiene la petición "simple": sin preflight CORS, que Apps Script no responde.
   // Por eso tampoco se usa xhr.upload.onprogress (registrarlo también fuerza el preflight).
+  // Si el tope corta una subida que el servidor sí alcanzó a guardar, el reintento deja la foto
+  // duplicada en Drive: preferible a perderla.
   async function subir(nombreArchivo, tipo, datosBase64) {
-    const respuesta = await fetch(URL_SCRIPT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ nombre: campoNombre.value.trim(), archivo: nombreArchivo, tipo, datosBase64 }),
-    });
-    if (!respuesta.ok) throw new Error('Problema de conexión, reintentando…');
-    const resultado = await respuesta.json();
+    const cuerpo = JSON.stringify({ nombre: campoNombre.value.trim(), archivo: nombreArchivo, tipo, datosBase64 });
+    const tope = new AbortController();
+    const temporizador = setTimeout(() => tope.abort(), ESPERA_BASE_MS + ESPERA_POR_MB_MS * cuerpo.length / 1048576);
+    let resultado;
+    try {
+      const respuesta = await fetch(URL_SCRIPT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: cuerpo,
+        signal: tope.signal,
+      });
+      if (!respuesta.ok) throw new Error('No se pudo subir. Revisa tu conexión.');
+      resultado = await respuesta.json();
+    } catch (error) {
+      // Errores de red y del tope llegan en inglés ("Failed to fetch", "AbortError").
+      if (error.name === 'AbortError') throw new Error('La conexión tardó demasiado. Inténtalo de nuevo.');
+      // TypeError: sin red. SyntaxError: Google devolvió una página en vez de JSON.
+      if (error instanceof TypeError || error instanceof SyntaxError) {
+        throw new Error('No se pudo subir. Revisa tu conexión.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(temporizador);
+    }
     if (!resultado.ok) {
       const error = new Error(resultado.error || 'No se pudo subir');
       error.definitivo = true; // un rechazo del servidor no se arregla reintentando
