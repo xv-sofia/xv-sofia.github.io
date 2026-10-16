@@ -32,7 +32,15 @@ QR ─► https://xv-sofia.github.io/   docs/index.html (GitHub Pages, estática
   La latencia de Google varía (de 5 a 23 s para una foto chica en la misma tarde).
 - Página y script son compatibles en cualquier orden de despliegue: sin `idSubida` el script
   guarda igual, y con el script viejo la consulta `?id=` devuelve la prueba de vida → se reenvía.
-- Se suben originales, sin comprimir. El nombre del invitado (opcional) crea una subcarpeta; el
+- **Las fotos se reducen en el celular** a 2560 px / JPEG 0,85 antes de subir (solo si pasan de
+  2560 px o 1,5 MB). Motivo: Apps Script recibe a ~0,5 MB/s y una foto de iPhone de 5 MB tardaba
+  12–16 s; reducida tarda ~5 s. En Drive NO quedan los originales y se pierde el EXIF (fecha,
+  lugar); la rotación sí se respeta. Si el navegador no puede abrir la imagen (HEIC fuera de
+  Safari) o la reducida pesa más, se sube el original. Videos y GIF van tal cual.
+- **3 subidas simultáneas por invitado.** Google permite 30 ejecuciones a la vez por cuenta y
+  todas corren con la misma: ~10 invitados subiendo a la vez llegan al tope; lo que se pase
+  falla y se reintenta solo. Medido: 6 fotos de 4,7 MB en 14 s (antes ~85 s).
+- El nombre del invitado (opcional) crea una subcarpeta; el
   `LockService` evita carpetas duplicadas cuando llegan dos subidas del mismo nombre a la vez.
 
 ## Archivos

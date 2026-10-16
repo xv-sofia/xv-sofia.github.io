@@ -169,6 +169,7 @@
 
   // Debe coincidir con TAMANO_MAXIMO_BYTES de apps-script/Codigo.gs.
   const TAMANO_MAXIMO_BYTES = 35 * 1024 * 1024;
+  const MENSAJE_MUY_PESADO = 'Muy pesado (más de 35 MB). Envíalo por WhatsApp 💌';
   const INTENTOS = 3;
 
   // A veces la respuesta de Google no llega aunque la foto sí se guardó (visto en iPhone y en
@@ -178,6 +179,18 @@
   const ESPERA_BASE_MS = 30 * 1000;
   const ESPERA_POR_MB_MS = 8 * 1000;
   const ESPERA_CONSULTA_MS = 15 * 1000;
+
+  // Apps Script recibe a ~0,5 MB/s: una foto de iPhone (3–5 MB, +33 % por base64) tardaba
+  // 12–16 s. Reducida a 2560 px (alcanza para imprimir 20×30 cm) queda en ~1 MB y ~5 s.
+  // Videos y GIF se suben tal cual.
+  const LADO_MAXIMO_PX = 2560;
+  const CALIDAD_JPEG = 0.85;
+  const REDUCIR_DESDE_BYTES = 1.5 * 1024 * 1024;
+
+  // Todas las ejecuciones del script corren con la misma cuenta, y Google permite 30 a la vez
+  // por cuenta EN TOTAL: 3 por invitado deja lugar para ~10 invitados subiendo al mismo tiempo.
+  // Si se pasa, Google rechaza y la página reintenta sola.
+  const SUBIDAS_SIMULTANEAS = 3;
 
   // Algunos navegadores dejan file.type vacío (sobre todo con HEIC); lo deducimos de la extensión.
   const TIPOS_POR_EXTENSION = {
@@ -193,7 +206,7 @@
   const lista = document.getElementById('lista');
 
   const cola = [];
-  let procesando = false;
+  let activos = 0;
   let subidos = 0;
   let fallidos = 0;
   let totalLote = 0;
@@ -216,7 +229,7 @@
   });
 
   window.addEventListener('beforeunload', (evento) => {
-    if (procesando) { evento.preventDefault(); evento.returnValue = ''; }
+    if (activos > 0) { evento.preventDefault(); evento.returnValue = ''; }
   });
 
   function tipoDe(archivo) {
@@ -239,19 +252,30 @@
     lista.prepend(fila);
 
     if (!/^(image|video)\//.test(tipo)) return marcar(fila, 'fallo', 'Solo se aceptan fotos y videos');
-    if (archivo.size > TAMANO_MAXIMO_BYTES) {
-      return marcar(fila, 'fallo', 'Muy pesado (más de 35 MB). Envíalo por WhatsApp 💌');
+    // Las fotos pesadas no se rechazan acá: después de reducirlas suelen entrar de sobra.
+    if (!tipo.startsWith('image/') && archivo.size > TAMANO_MAXIMO_BYTES) {
+      return marcar(fila, 'fallo', MENSAJE_MUY_PESADO);
     }
     cola.push({ archivo, tipo, fila });
     totalLote++;
   }
 
-  async function procesarCola() {
-    if (procesando) return;
-    procesando = true;
+  // Hasta SUBIDAS_SIMULTANEAS trabajadores sacan archivos de la misma cola. Si el invitado elige
+  // más fotos mientras tanto, se suman a la cola y se lanzan trabajadores si hay lugar.
+  function procesarCola() {
+    while (activos < SUBIDAS_SIMULTANEAS && cola.length) {
+      activos++;
+      trabajar().finally(() => {
+        activos--;
+        if (activos === 0 && totalLote) cerrarLote();
+      });
+    }
+    mostrarProgreso();
+  }
+
+  async function trabajar() {
     while (cola.length) {
       const { archivo, tipo, fila } = cola.shift();
-      mostrarEstado(`Subiendo ${subidos + fallidos + 1} de ${totalLote}…`);
       marcar(fila, 'subiendo', 'Subiendo…');
       try {
         await subirConReintentos(archivo, tipo, fila);
@@ -261,13 +285,23 @@
         fallidos++;
         marcar(fila, 'fallo', error.message || 'No se pudo subir');
       }
+      mostrarProgreso();
     }
-    procesando = false;
-    if (totalLote) cerrarLote();
+  }
+
+  function mostrarProgreso() {
+    const listas = subidos + fallidos;
+    if (totalLote && listas < totalLote) mostrarEstado(`Subiendo… ${listas} de ${totalLote} listas`);
   }
 
   async function subirConReintentos(archivo, tipo, fila) {
-    const datosBase64 = await leerBase64(archivo);
+    const preparado = await prepararArchivo(archivo, tipo);
+    if (preparado.blob.size > TAMANO_MAXIMO_BYTES) {
+      const error = new Error(MENSAJE_MUY_PESADO);
+      error.definitivo = true;
+      throw error;
+    }
+    const datosBase64 = await leerBase64(preparado.blob);
     const idSubida = nuevoIdSubida();
     let ultimoError;
     for (let intento = 1; intento <= INTENTOS; intento++) {
@@ -277,7 +311,7 @@
           // Si el intento anterior sí llegó y solo se perdió la respuesta, no se reenvía entero.
           if (await yaLlego(idSubida)) return;
         }
-        return await subir(archivo.name, tipo, datosBase64, idSubida);
+        return await subir(preparado.nombre, preparado.tipo, datosBase64, idSubida);
       } catch (error) {
         ultimoError = error;
         if (error.definitivo) break;
@@ -285,6 +319,47 @@
       }
     }
     throw ultimoError;
+  }
+
+  // Reduce la foto a LADO_MAXIMO_PX en JPEG. Ante cualquier duda devuelve el original: nunca se
+  // pierde una foto por no poder reducirla (p. ej. HEIC en Chrome de escritorio, que no la abre).
+  // Al pasar por <img> el navegador ya aplica la rotación EXIF, así que la foto no sale de lado.
+  // Se pierden los metadatos EXIF (fecha de toma, lugar).
+  async function prepararArchivo(archivo, tipo) {
+    const original = { blob: archivo, nombre: archivo.name, tipo };
+    if (!tipo.startsWith('image/') || tipo === 'image/gif') return original;
+    try {
+      const imagen = await cargarImagen(archivo);
+      const ancho = imagen.naturalWidth;
+      const alto = imagen.naturalHeight;
+      const escala = Math.min(1, LADO_MAXIMO_PX / Math.max(ancho, alto));
+      if (escala === 1 && archivo.size <= REDUCIR_DESDE_BYTES) return original;
+
+      const lienzo = document.createElement('canvas');
+      lienzo.width = Math.round(ancho * escala);
+      lienzo.height = Math.round(alto * escala);
+      const contexto = lienzo.getContext('2d');
+      contexto.fillStyle = '#fff'; // un PNG transparente quedaría negro en JPEG
+      contexto.fillRect(0, 0, lienzo.width, lienzo.height);
+      contexto.drawImage(imagen, 0, 0, lienzo.width, lienzo.height);
+      const reducida = await new Promise((r) => lienzo.toBlob(r, 'image/jpeg', CALIDAD_JPEG));
+      lienzo.width = lienzo.height = 0; // libera la memoria del lienzo enseguida (iPhone)
+
+      if (!reducida || reducida.size >= archivo.size) return original;
+      return { blob: reducida, nombre: archivo.name.replace(/\.[^.]+$/, '') + '.jpg', tipo: 'image/jpeg' };
+    } catch (_) {
+      return original;
+    }
+  }
+
+  function cargarImagen(archivo) {
+    return new Promise((resolver, rechazar) => {
+      const url = URL.createObjectURL(archivo);
+      const imagen = new Image();
+      imagen.onload = () => { URL.revokeObjectURL(url); resolver(imagen); };
+      imagen.onerror = () => { URL.revokeObjectURL(url); rechazar(new Error('Formato no soportado')); };
+      imagen.src = url;
+    });
   }
 
   function nuevoIdSubida() {
