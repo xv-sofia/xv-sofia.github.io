@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XV Sofía · Compartí tus fotos</title>
+<meta name="description" content="Subí las fotos que tomaste en los XV de Sofía.">
+<meta name="theme-color" content="#f7eef0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📷</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --fondo: #f7eef0;
+    --tarjeta: #fffafb;
+    --texto: #3b2a30;
+    --texto-suave: #7a6168;
+    --acento: #b5838d;
+    --acento-fuerte: #8f5f6a;
+    --dorado: #c9a96e;
+    --borde: #ead9dd;
+    --ok: #4f8a5b;
+    --error: #b4483f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  html { background: var(--fondo); }
+  body {
+    min-height: 100vh;
+    background: radial-gradient(circle at top, #fff 0%, var(--fondo) 60%) fixed;
+    color: var(--texto);
+    font: 16px/1.5 Inter, system-ui, -apple-system, sans-serif;
+    padding: 32px 16px calc(32px + env(safe-area-inset-bottom));
+  }
+  main { max-width: 480px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 24px; }
+  .xv {
+    font: 600 14px/1 "Cormorant Garamond", serif;
+    letter-spacing: .4em;
+    color: var(--dorado);
+    text-transform: uppercase;
+  }
+  h1 {
+    font: 400 64px/1.1 "Great Vibes", cursive;
+    color: var(--acento-fuerte);
+    margin: 8px 0 4px;
+  }
+  .bajada {
+    font: 500 20px/1.4 "Cormorant Garamond", serif;
+    color: var(--texto-suave);
+    margin: 0;
+  }
+  .filete { width: 80px; height: 1px; background: var(--dorado); margin: 20px auto 0; }
+  .tarjeta {
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: 20px;
+    padding: 24px 20px;
+    box-shadow: 0 8px 30px rgba(143, 95, 106, .08);
+  }
+  label { display: block; font-weight: 500; margin-bottom: 6px; }
+  .opcional { color: var(--texto-suave); font-weight: 400; font-size: 14px; }
+  input[type=text] {
+    width: 100%;
+    font: inherit;
+    padding: 12px 14px;
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--texto);
+  }
+  input[type=text]:focus { outline: 2px solid var(--acento); outline-offset: 1px; }
+  .boton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    margin-top: 20px;
+    padding: 18px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--acento-fuerte);
+    color: #fff;
+    font: 600 18px/1 Inter, sans-serif;
+    cursor: pointer;
+  }
+  .boton:active { transform: scale(.98); }
+  .boton[aria-disabled=true] { opacity: .5; pointer-events: none; }
+  .boton svg { width: 22px; height: 22px; }
+  input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .nota { font-size: 14px; color: var(--texto-suave); text-align: center; margin: 12px 0 0; }
+  .estado {
+    margin-top: 20px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: #fff;
+    border: 1px solid var(--borde);
+    text-align: center;
+    font-weight: 500;
+  }
+  .tarjeta > .estado:first-child { margin-top: 0; margin-bottom: 20px; }
+  .estado.gracias { background: #f1f7f2; border-color: #cfe3d3; color: var(--ok); }
+  .estado.aviso { background: #fbf0ef; border-color: #f0d2cf; color: var(--error); }
+  ul { list-style: none; margin: 16px 0 0; padding: 0; }
+  li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid var(--borde);
+    font-size: 14px;
+  }
+  li:first-child { border-top: 0; }
+  .miniatura {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    background: var(--fondo) center/cover no-repeat;
+  }
+  .detalle { flex: 1; min-width: 0; }
+  .archivo { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .situacion { color: var(--texto-suave); }
+  li.listo .situacion { color: var(--ok); }
+  li.fallo .situacion { color: var(--error); }
+  .barra { height: 4px; border-radius: 2px; background: var(--borde); margin-top: 6px; overflow: hidden; }
+  .barra span { display: block; height: 100%; width: 0; background: var(--acento); transition: width .3s; }
+  li.subiendo .barra span { width: 40%; animation: vaiven 1.2s ease-in-out infinite alternate; }
+  li.listo .barra span { width: 100%; background: var(--ok); }
+  li.fallo .barra span { width: 100%; background: var(--error); }
+  @keyframes vaiven { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="xv">Mis XV años</div>
+    <h1>Sofía</h1>
+    <p class="bajada">Gracias por acompañarme.<br>Compartí conmigo las fotos que tomaste.</p>
+    <div class="filete"></div>
+  </header>
+
+  <section class="tarjeta">
+    <p id="sinConfigurar" class="estado aviso" hidden>
+      Esta página todavía no está conectada. Volvé a intentarlo más tarde.
+    </p>
+
+    <label for="nombre">¿Quién sos? <span class="opcional">(opcional)</span></label>
+    <input id="nombre" type="text" autocomplete="name" placeholder="Ej.: Tía Marta" maxlength="60">
+
+    <label id="botonElegir" class="boton" for="archivos" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      Elegir fotos y videos
+    </label>
+    <input id="archivos" type="file" accept="image/*,video/*" multiple>
+    <p class="nota">Podés elegir varias a la vez. Dejá esta pantalla abierta mientras se suben.</p>
+
+    <p id="estado" class="estado" hidden></p>
+    <ul id="lista"></ul>
+  </section>
+</main>
+
+<script>
+  // URL del Apps Script desplegado como aplicación web (termina en /exec).
+  const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbwaPaeEzt87759sgYogVevf1qc8sWMLX8tTVU1PSn63fqVi7id1Ljz8JXs6l7GPnY_u/exec';
+
+  // Debe coincidir con TAMANO_MAXIMO_BYTES de apps-script/Codigo.gs.
+  const TAMANO_MAXIMO_BYTES = 35 * 1024 * 1024;
+  const INTENTOS = 3;
+
+  // Algunos navegadores dejan file.type vacío (sobre todo con HEIC); lo deducimos de la extensión.
+  const TIPOS_POR_EXTENSION = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
+    heic: 'image/heic', heif: 'image/heif', dng: 'image/x-adobe-dng',
+    mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v', '3gp': 'video/3gpp', webm: 'video/webm',
+  };
+
+  const campoNombre = document.getElementById('nombre');
+  const campoArchivos = document.getElementById('archivos');
+  const botonElegir = document.getElementById('botonElegir');
+  const estado = document.getElementById('estado');
+  const lista = document.getElementById('lista');
+
+  const cola = [];
+  let procesando = false;
+  let subidos = 0;
+  let fallidos = 0;
+  let totalLote = 0;
+
+  if (!URL_SCRIPT) {
+    document.getElementById('sinConfigurar').hidden = false;
+    botonElegir.setAttribute('aria-disabled', 'true');
+  }
+
+  // El nombre se recuerda solo como comodidad; si el almacenamiento falla, la página sigue igual.
+  try { campoNombre.value = localStorage.getItem('xv-sofia-nombre') || ''; } catch (_) {}
+  campoNombre.addEventListener('change', () => {
+    try { localStorage.setItem('xv-sofia-nombre', campoNombre.value.trim()); } catch (_) {}
+  });
+
+  campoArchivos.addEventListener('change', () => {
+    for (const archivo of campoArchivos.files) encolar(archivo);
+    campoArchivos.value = '';
+    procesarCola();
+  });
+
+  window.addEventListener('beforeunload', (evento) => {
+    if (procesando) { evento.preventDefault(); evento.returnValue = ''; }
+  });
+
+  function tipoDe(archivo) {
+    if (archivo.type) return archivo.type;
+    const extension = archivo.name.split('.').pop().toLowerCase();
+    return TIPOS_POR_EXTENSION[extension] || '';
+  }
+
+  function encolar(archivo) {
+    const fila = document.createElement('li');
+    fila.innerHTML =
+      '<div class="miniatura"></div>' +
+      '<div class="detalle"><div class="archivo"></div><div class="situacion">En espera</div>' +
+      '<div class="barra"><span></span></div></div>';
+    fila.querySelector('.archivo').textContent = archivo.name;
+    const tipo = tipoDe(archivo);
+    if (tipo.startsWith('image/') && !/hei[cf]/.test(tipo)) {
+      fila.querySelector('.miniatura').style.backgroundImage = `url(${URL.createObjectURL(archivo)})`;
+    }
+    lista.prepend(fila);
+
+    if (!/^(image|video)\//.test(tipo)) return marcar(fila, 'fallo', 'Solo se aceptan fotos y videos');
+    if (archivo.size > TAMANO_MAXIMO_BYTES) {
+      return marcar(fila, 'fallo', 'Muy pesado (más de 35 MB). Mandalo por WhatsApp 💌');
+    }
+    cola.push({ archivo, tipo, fila });
+    totalLote++;
+  }
+
+  async function procesarCola() {
+    if (procesando) return;
+    procesando = true;
+    while (cola.length) {
+      const { archivo, tipo, fila } = cola.shift();
+      mostrarEstado(`Subiendo ${subidos + fallidos + 1} de ${totalLote}…`);
+      marcar(fila, 'subiendo', 'Subiendo…');
+      try {
+        await subirConReintentos(archivo, tipo);
+        subidos++;
+        marcar(fila, 'listo', 'Subida ✓');
+      } catch (error) {
+        fallidos++;
+        marcar(fila, 'fallo', error.message || 'No se pudo subir');
+      }
+    }
+    procesando = false;
+    if (totalLote) cerrarLote();
+  }
+
+  async function subirConReintentos(archivo, tipo) {
+    const datosBase64 = await leerBase64(archivo);
+    let ultimoError;
+    for (let intento = 1; intento <= INTENTOS; intento++) {
+      try {
+        return await subir(archivo.name, tipo, datosBase64);
+      } catch (error) {
+        ultimoError = error;
+        if (error.definitivo) break;
+        await new Promise((r) => setTimeout(r, 1500 * intento));
+      }
+    }
+    throw ultimoError;
+  }
+
+  // text/plain mantiene la petición "simple": sin preflight CORS, que Apps Script no responde.
+  // Por eso tampoco se usa xhr.upload.onprogress (registrarlo también fuerza el preflight).
+  async function subir(nombreArchivo, tipo, datosBase64) {
+    const respuesta = await fetch(URL_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ nombre: campoNombre.value.trim(), archivo: nombreArchivo, tipo, datosBase64 }),
+    });
+    if (!respuesta.ok) throw new Error('Problema de conexión, reintentando…');
+    const resultado = await respuesta.json();
+    if (!resultado.ok) {
+      const error = new Error(resultado.error || 'No se pudo subir');
+      error.definitivo = true; // un rechazo del servidor no se arregla reintentando
+      throw error;
+    }
+  }
+
+  function leerBase64(archivo) {
+    return new Promise((resolver, rechazar) => {
+      const lector = new FileReader();
+      lector.onload = () => resolver(String(lector.result).split(',')[1] || '');
+      lector.onerror = () => rechazar(new Error('No se pudo leer el archivo'));
+      lector.readAsDataURL(archivo);
+    });
+  }
+
+  function marcar(fila, clase, texto) {
+    fila.className = clase;
+    fila.querySelector('.situacion').textContent = texto;
+  }
+
+  function mostrarEstado(texto, clase = '') {
+    estado.hidden = false;
+    estado.className = 'estado ' + clase;
+    estado.textContent = texto;
+  }
+
+  function cerrarLote() {
+    if (fallidos === 0) {
+      mostrarEstado(`¡Gracias! ${subidos === 1 ? 'Se subió 1 archivo' : `Se subieron ${subidos} archivos`} 💖`, 'gracias');
+    } else {
+      mostrarEstado(`Se subieron ${subidos} de ${totalLote}. Podés volver a elegir los que fallaron.`, 'aviso');
+    }
+    subidos = fallidos = totalLote = 0;
+  }
+</script>
+</body>
+</html>

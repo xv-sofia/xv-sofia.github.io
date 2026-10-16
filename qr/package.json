@@ -1,0 +1,14 @@
+{
+  "name": "xv-sofia-qr",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generar": "node generar-qr.mjs",
+    "verificar": "node verificar-qr.mjs"
+  },
+  "dependencies": {
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
+    "qrcode": "^1.5.4"
+  }
+}
