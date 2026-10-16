@@ -24,9 +24,14 @@ QR ─► https://xv-sofia.github.io/   docs/index.html (GitHub Pages, estática
 - `text/plain` y sin `xhr.upload.onprogress`: cualquiera de las dos cosas contrarias dispara un
   preflight CORS que Apps Script no responde. Por eso no hay porcentaje por foto, solo
   "Subiendo…" + contador.
-- Cada intento de subida tiene tope de espera (60 s + 8 s/MB) con `AbortController`: sin él,
-  una conexión colgada dejaba al invitado en "Subiendo…" para siempre (pasó en una prueba real).
-  Si el tope corta algo que sí se guardó, el reintento duplica la foto: preferible a perderla.
+- **A veces Google guarda la foto pero la respuesta no llega** (pasó desde iPhone y desde
+  escritorio; con curl nunca). Por eso: cada intento tiene tope de espera (30 s + 8 s/MB,
+  `AbortController`); cada archivo lleva un `idSubida` (UUID del navegador) que el script anota
+  en `CacheService` por 6 h; antes de reintentar, la página consulta `GET ?id=` y si ya llegó no
+  lo reenvía; y si igual llega un POST repetido, el script responde `repetido: true` sin guardar.
+  La latencia de Google varía (de 5 a 23 s para una foto chica en la misma tarde).
+- Página y script son compatibles en cualquier orden de despliegue: sin `idSubida` el script
+  guarda igual, y con el script viejo la consulta `?id=` devuelve la prueba de vida → se reenvía.
 - Se suben originales, sin comprimir. El nombre del invitado (opcional) crea una subcarpeta; el
   `LockService` evita carpetas duplicadas cuando llegan dos subidas del mismo nombre a la vez.
 

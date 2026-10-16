@@ -171,10 +171,13 @@
   const TAMANO_MAXIMO_BYTES = 35 * 1024 * 1024;
   const INTENTOS = 3;
 
-  // Sin tope, una conexión colgada deja al invitado en "Subiendo…" para siempre y el reintento
-  // nunca llega. El tope crece con el tamaño: 8 s por MB cubre una subida móvil de ~1 Mbps.
-  const ESPERA_BASE_MS = 60 * 1000;
+  // A veces la respuesta de Google no llega aunque la foto sí se guardó (visto en iPhone y en
+  // escritorio). Sin tope, el invitado quedaría en "Subiendo…" para siempre. El tope crece con
+  // el tamaño: 8 s por MB cubre una subida móvil de ~1 Mbps. Puede ser corto porque reintentar
+  // no duplica: cada archivo lleva un idSubida y el script no guarda dos veces el mismo.
+  const ESPERA_BASE_MS = 30 * 1000;
   const ESPERA_POR_MB_MS = 8 * 1000;
+  const ESPERA_CONSULTA_MS = 15 * 1000;
 
   // Algunos navegadores dejan file.type vacío (sobre todo con HEIC); lo deducimos de la extensión.
   const TIPOS_POR_EXTENSION = {
@@ -251,7 +254,7 @@
       mostrarEstado(`Subiendo ${subidos + fallidos + 1} de ${totalLote}…`);
       marcar(fila, 'subiendo', 'Subiendo…');
       try {
-        await subirConReintentos(archivo, tipo);
+        await subirConReintentos(archivo, tipo, fila);
         subidos++;
         marcar(fila, 'listo', 'Subida ✓');
       } catch (error) {
@@ -263,12 +266,18 @@
     if (totalLote) cerrarLote();
   }
 
-  async function subirConReintentos(archivo, tipo) {
+  async function subirConReintentos(archivo, tipo, fila) {
     const datosBase64 = await leerBase64(archivo);
+    const idSubida = nuevoIdSubida();
     let ultimoError;
     for (let intento = 1; intento <= INTENTOS; intento++) {
       try {
-        return await subir(archivo.name, tipo, datosBase64);
+        if (intento > 1) {
+          marcar(fila, 'subiendo', 'Reintentando…');
+          // Si el intento anterior sí llegó y solo se perdió la respuesta, no se reenvía entero.
+          if (await yaLlego(idSubida)) return;
+        }
+        return await subir(archivo.name, tipo, datosBase64, idSubida);
       } catch (error) {
         ultimoError = error;
         if (error.definitivo) break;
@@ -278,24 +287,45 @@
     throw ultimoError;
   }
 
+  function nuevoIdSubida() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 14);
+  }
+
+  // Ante cualquier duda responde false: reenviar es seguro porque el script descarta repetidos.
+  async function yaLlego(idSubida) {
+    try {
+      const resultado = await pedir(`${URL_SCRIPT}?id=${encodeURIComponent(idSubida)}`, {}, ESPERA_CONSULTA_MS);
+      return resultado.existe === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // text/plain mantiene la petición "simple": sin preflight CORS, que Apps Script no responde.
   // Por eso tampoco se usa xhr.upload.onprogress (registrarlo también fuerza el preflight).
-  // Si el tope corta una subida que el servidor sí alcanzó a guardar, el reintento deja la foto
-  // duplicada en Drive: preferible a perderla.
-  async function subir(nombreArchivo, tipo, datosBase64) {
-    const cuerpo = JSON.stringify({ nombre: campoNombre.value.trim(), archivo: nombreArchivo, tipo, datosBase64 });
+  async function subir(nombreArchivo, tipo, datosBase64, idSubida) {
+    const cuerpo = JSON.stringify({ nombre: campoNombre.value.trim(), archivo: nombreArchivo, tipo, idSubida, datosBase64 });
+    const resultado = await pedir(URL_SCRIPT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: cuerpo,
+    }, ESPERA_BASE_MS + ESPERA_POR_MB_MS * cuerpo.length / 1048576);
+    if (!resultado.ok) {
+      const error = new Error(resultado.error || 'No se pudo subir');
+      error.definitivo = true; // un rechazo del servidor no se arregla reintentando
+      throw error;
+    }
+  }
+
+  // fetch con tope de espera; devuelve el JSON de la respuesta.
+  async function pedir(url, opciones, esperaMaximaMs) {
     const tope = new AbortController();
-    const temporizador = setTimeout(() => tope.abort(), ESPERA_BASE_MS + ESPERA_POR_MB_MS * cuerpo.length / 1048576);
-    let resultado;
+    const temporizador = setTimeout(() => tope.abort(), esperaMaximaMs);
     try {
-      const respuesta = await fetch(URL_SCRIPT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: cuerpo,
-        signal: tope.signal,
-      });
+      const respuesta = await fetch(url, { ...opciones, signal: tope.signal });
       if (!respuesta.ok) throw new Error('No se pudo subir. Revisa tu conexión.');
-      resultado = await respuesta.json();
+      return await respuesta.json();
     } catch (error) {
       // Errores de red y del tope llegan en inglés ("Failed to fetch", "AbortError").
       if (error.name === 'AbortError') throw new Error('La conexión tardó demasiado. Inténtalo de nuevo.');
@@ -306,11 +336,6 @@
       throw error;
     } finally {
       clearTimeout(temporizador);
-    }
-    if (!resultado.ok) {
-      const error = new Error(resultado.error || 'No se pudo subir');
-      error.definitivo = true; // un rechazo del servidor no se arregla reintentando
-      throw error;
     }
   }
 
