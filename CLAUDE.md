@@ -6,7 +6,7 @@ sesión**, las fotos y videos de la fiesta. Se guardan en una carpeta del Drive 
 ## Arquitectura
 
 ```
-QR ─► https://kevinguerrero8.github.io/xv-sofia/   docs/index.html (GitHub Pages, estática)
+QR ─► https://xv-sofia.github.io/   docs/index.html (GitHub Pages, estática)
           │ fetch POST, una foto por petición, JSON con base64, Content-Type text/plain
           ▼
       Apps Script (apps-script/Codigo.gs) · Ejecutar como: Yo · Acceso: Cualquier usuario
@@ -15,9 +15,12 @@ QR ─► https://kevinguerrero8.github.io/xv-sofia/   docs/index.html (GitHub P
       Drive / carpeta ID_CARPETA / <nombre del invitado>/
 ```
 
-- **El QR apunta a Pages, nunca al Apps Script.** Ya está impreso: el backend se puede cambiar
-  editando `URL_SCRIPT` en la página sin tocar el QR. No cambiar el nombre del repo `xv-sofia`
-  ni de la cuenta de GitHub: rompería todos los QR impresos.
+- **El QR apunta a Pages, nunca al Apps Script.** Una vez impreso, el backend se puede cambiar
+  editando `URL_SCRIPT` en la página sin tocar el QR.
+- **El repo vive en la organización `xv-sofia` con nombre `xv-sofia.github.io`** (sitio de
+  organización → URL en la raíz). Se hizo así para que el usuario personal de Kevin no aparezca
+  en la URL que ven los invitados. No renombrar ni la organización ni el repo: rompería los QR.
+- Los textos de la página tratan al invitado de **tú** (no voseo).
 - `text/plain` y sin `xhr.upload.onprogress`: cualquiera de las dos cosas contrarias dispara un
   preflight CORS que Apps Script no responde. Por eso no hay porcentaje por foto, solo
   "Subiendo…" + contador.
@@ -47,9 +50,10 @@ QR ─► https://kevinguerrero8.github.io/xv-sofia/   docs/index.html (GitHub P
       `access-control-allow-origin: *` en la redirección y en la respuesta final. Subida real
       desde el navegador OK (2 JPEG de 1 MB ≈ 5 s c/u; 15 MB ≈ 16 s). Las pruebas quedaron en la
       subcarpeta "Prueba Claude" de Drive: borrarla antes de la fiesta.
-- [ ] `git init` + repo público `KevinGuerrero8/xv-sofia` + activar Pages desde rama `main`,
-      carpeta `/docs`. La página está en `docs/` justamente porque Pages solo publica desde la
-      raíz o `/docs`: así la URL es `/xv-sofia/` y coincide con el QR.
+- [x] Publicado en Pages desde `main` + `/docs` (Pages solo publica desde la raíz o `/docs`;
+      por eso la página no está en `web/`). Primero estuvo en `KevinGuerrero8/xv-sofia`.
+- [ ] Mover el repo a la organización `xv-sofia` como `xv-sofia.github.io` y probar la URL
+      nueva. El QR en `salida/` YA apunta a `https://xv-sofia.github.io/`.
 - [ ] Prueba real de punta a punta desde celulares (Android + iPhone, HEIC, video) **antes de
       imprimir**.
 

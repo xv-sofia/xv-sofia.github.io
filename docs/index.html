@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>XV Sofía · Compartí tus fotos</title>
-<meta name="description" content="Subí las fotos que tomaste en los XV de Sofía.">
+<title>XV Sofía · Comparte tus fotos</title>
+<meta name="description" content="Sube las fotos que tomaste en los XV de Sofía.">
 <meta name="theme-color" content="#f7eef0">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📷</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -139,16 +139,16 @@
   <header>
     <div class="xv">Mis XV años</div>
     <h1>Sofía</h1>
-    <p class="bajada">Gracias por acompañarme.<br>Compartí conmigo las fotos que tomaste.</p>
+    <p class="bajada">Gracias por acompañarme.<br>Comparte conmigo las fotos que tomaste.</p>
     <div class="filete"></div>
   </header>
 
   <section class="tarjeta">
     <p id="sinConfigurar" class="estado aviso" hidden>
-      Esta página todavía no está conectada. Volvé a intentarlo más tarde.
+      Esta página todavía no está conectada. Vuelve a intentarlo más tarde.
     </p>
 
-    <label for="nombre">¿Quién sos? <span class="opcional">(opcional)</span></label>
+    <label for="nombre">¿Quién eres? <span class="opcional">(opcional)</span></label>
     <input id="nombre" type="text" autocomplete="name" placeholder="Ej.: Tía Marta" maxlength="60">
 
     <label id="botonElegir" class="boton" for="archivos" role="button">
@@ -156,7 +156,7 @@
       Elegir fotos y videos
     </label>
     <input id="archivos" type="file" accept="image/*,video/*" multiple>
-    <p class="nota">Podés elegir varias a la vez. Dejá esta pantalla abierta mientras se suben.</p>
+    <p class="nota">Puedes elegir varias a la vez. Deja esta pantalla abierta mientras se suben.</p>
 
     <p id="estado" class="estado" hidden></p>
     <ul id="lista"></ul>
@@ -232,7 +232,7 @@
 
     if (!/^(image|video)\//.test(tipo)) return marcar(fila, 'fallo', 'Solo se aceptan fotos y videos');
     if (archivo.size > TAMANO_MAXIMO_BYTES) {
-      return marcar(fila, 'fallo', 'Muy pesado (más de 35 MB). Mandalo por WhatsApp 💌');
+      return marcar(fila, 'fallo', 'Muy pesado (más de 35 MB). Envíalo por WhatsApp 💌');
     }
     cola.push({ archivo, tipo, fila });
     totalLote++;
@@ -314,7 +314,7 @@
     if (fallidos === 0) {
       mostrarEstado(`¡Gracias! ${subidos === 1 ? 'Se subió 1 archivo' : `Se subieron ${subidos} archivos`} 💖`, 'gracias');
     } else {
-      mostrarEstado(`Se subieron ${subidos} de ${totalLote}. Podés volver a elegir los que fallaron.`, 'aviso');
+      mostrarEstado(`Se subieron ${subidos} de ${totalLote}. Puedes volver a elegir los que fallaron.`, 'aviso');
     }
     subidos = fallidos = totalLote = 0;
   }
