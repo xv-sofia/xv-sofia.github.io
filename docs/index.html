@@ -131,10 +131,25 @@
   li.listo .barra span { width: 100%; background: var(--ok); }
   li.fallo .barra span { width: 100%; background: var(--error); }
   @keyframes vaiven { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  .aviso-fijo {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    margin: -32px -16px 24px;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+    background: var(--acento-fuerte);
+    color: #fff;
+    text-align: center;
+    font-weight: 600;
+    font-size: 15px;
+  }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
+<div id="avisoSubiendo" class="aviso-fijo" role="status" hidden>
+  No cierres esta pantalla hasta que terminen de subir
+</div>
 <main>
   <header>
     <div class="xv">Mis XV años</div>
@@ -192,6 +207,13 @@
   // Si se pasa, Google rechaza y la página reintenta sola.
   const SUBIDAS_SIMULTANEAS = 3;
 
+  // Si el invitado cierra la página a mitad de camino y vuelve a elegir todas sus fotos, las ya
+  // subidas se saltan. La huella es SHA-256 de los primeros 4 MB + el tamaño (hashear un video
+  // de 35 MB entero sería lento en un celular) y se guarda en este navegador.
+  const CLAVE_SUBIDAS = 'xv-sofia-subidas';
+  const BYTES_HUELLA = 4 * 1024 * 1024;
+  const HUELLAS_RECORDADAS = 3000;
+
   // Algunos navegadores dejan file.type vacío (sobre todo con HEIC); lo deducimos de la extensión.
   const TIPOS_POR_EXTENSION = {
     jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
@@ -204,10 +226,14 @@
   const botonElegir = document.getElementById('botonElegir');
   const estado = document.getElementById('estado');
   const lista = document.getElementById('lista');
+  const avisoSubiendo = document.getElementById('avisoSubiendo');
 
   const cola = [];
+  const huellasEnCurso = new Set();
+  let bloqueoPantalla = null;
   let activos = 0;
   let subidos = 0;
+  let yaEstaban = 0;
   let fallidos = 0;
   let totalLote = 0;
 
@@ -231,6 +257,27 @@
   window.addEventListener('beforeunload', (evento) => {
     if (activos > 0) { evento.preventDefault(); evento.returnValue = ''; }
   });
+
+  // El navegador suelta el wake lock solo cuando la página pasa a segundo plano; al volver, si
+  // todavía hay subidas, se pide de nuevo.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && activos > 0) mantenerPantallaEncendida();
+  });
+
+  // Evita que el celular se bloquee solo mientras sube (iOS 16.4+, Chrome Android). Si el
+  // navegador no lo soporta o lo niega, la subida sigue igual.
+  async function mantenerPantallaEncendida() {
+    if (bloqueoPantalla || !('wakeLock' in navigator)) return;
+    try {
+      bloqueoPantalla = await navigator.wakeLock.request('screen');
+      bloqueoPantalla.addEventListener('release', () => { bloqueoPantalla = null; });
+    } catch (_) {}
+  }
+
+  function soltarPantalla() {
+    if (bloqueoPantalla) bloqueoPantalla.release().catch(() => {});
+    bloqueoPantalla = null;
+  }
 
   function tipoDe(archivo) {
     if (archivo.type) return archivo.type;
@@ -263,11 +310,19 @@
   // Hasta SUBIDAS_SIMULTANEAS trabajadores sacan archivos de la misma cola. Si el invitado elige
   // más fotos mientras tanto, se suman a la cola y se lanzan trabajadores si hay lugar.
   function procesarCola() {
+    if (cola.length && activos === 0) {
+      avisoSubiendo.hidden = false;
+      mantenerPantallaEncendida();
+    }
     while (activos < SUBIDAS_SIMULTANEAS && cola.length) {
       activos++;
       trabajar().finally(() => {
         activos--;
-        if (activos === 0 && totalLote) cerrarLote();
+        if (activos === 0) {
+          avisoSubiendo.hidden = true;
+          soltarPantalla();
+          if (totalLote) cerrarLote();
+        }
       });
     }
     mostrarProgreso();
@@ -278,9 +333,9 @@
       const { archivo, tipo, fila } = cola.shift();
       marcar(fila, 'subiendo', 'Subiendo…');
       try {
-        await subirConReintentos(archivo, tipo, fila);
-        subidos++;
-        marcar(fila, 'listo', 'Subida ✓');
+        const { yaEstaba } = await subirConReintentos(archivo, tipo, fila);
+        if (yaEstaba) yaEstaban++; else subidos++;
+        marcar(fila, 'listo', yaEstaba ? 'Ya estaba subida ✓' : 'Subida ✓');
       } catch (error) {
         fallidos++;
         marcar(fila, 'fallo', error.message || 'No se pudo subir');
@@ -290,35 +345,84 @@
   }
 
   function mostrarProgreso() {
-    const listas = subidos + fallidos;
+    const listas = subidos + yaEstaban + fallidos;
     if (totalLote && listas < totalLote) mostrarEstado(`Subiendo… ${listas} de ${totalLote} listas`);
   }
 
+  // Devuelve { yaEstaba: true } si la foto ya se había subido antes (en esta selección, en una
+  // visita anterior desde este navegador, o según el script en las últimas 6 h).
   async function subirConReintentos(archivo, tipo, fila) {
-    const preparado = await prepararArchivo(archivo, tipo);
-    if (preparado.blob.size > TAMANO_MAXIMO_BYTES) {
-      const error = new Error(MENSAJE_MUY_PESADO);
-      error.definitivo = true;
-      throw error;
-    }
-    const datosBase64 = await leerBase64(preparado.blob);
-    const idSubida = nuevoIdSubida();
-    let ultimoError;
-    for (let intento = 1; intento <= INTENTOS; intento++) {
-      try {
-        if (intento > 1) {
-          marcar(fila, 'subiendo', 'Reintentando…');
-          // Si el intento anterior sí llegó y solo se perdió la respuesta, no se reenvía entero.
-          if (await yaLlego(idSubida)) return;
-        }
-        return await subir(preparado.nombre, preparado.tipo, datosBase64, idSubida);
-      } catch (error) {
-        ultimoError = error;
-        if (error.definitivo) break;
-        await new Promise((r) => setTimeout(r, 1500 * intento));
+    const huella = await huellaDe(archivo);
+    if (huella && (huellasEnCurso.has(huella) || yaSubidaAntes(huella))) return { yaEstaba: true };
+    if (huella) huellasEnCurso.add(huella);
+    try {
+      const preparado = await prepararArchivo(archivo, tipo);
+      if (preparado.blob.size > TAMANO_MAXIMO_BYTES) {
+        const error = new Error(MENSAJE_MUY_PESADO);
+        error.definitivo = true;
+        throw error;
       }
+      const datosBase64 = await leerBase64(preparado.blob);
+      // La huella sirve también de idSubida: el script descarta repetidos aunque este navegador
+      // haya olvidado lo que subió.
+      const idSubida = huella || nuevoIdSubida();
+      let ultimoError;
+      for (let intento = 1; intento <= INTENTOS; intento++) {
+        try {
+          if (intento > 1) {
+            marcar(fila, 'subiendo', 'Reintentando…');
+            // Si el intento anterior sí llegó y solo se perdió la respuesta, no se reenvía entero.
+            if (await yaLlego(idSubida)) {
+              recordarSubida(huella);
+              return { yaEstaba: false };
+            }
+          }
+          const resultado = await subir(preparado.nombre, preparado.tipo, datosBase64, idSubida);
+          recordarSubida(huella);
+          return { yaEstaba: resultado.repetido === true };
+        } catch (error) {
+          ultimoError = error;
+          if (error.definitivo) break;
+          await new Promise((r) => setTimeout(r, 1500 * intento));
+        }
+      }
+      throw ultimoError;
+    } finally {
+      if (huella) huellasEnCurso.delete(huella);
     }
-    throw ultimoError;
+  }
+
+  // SHA-256 en hexadecimal (64 caracteres, el formato que acepta el script). '' si el navegador
+  // no puede calcularla: la subida sigue sin esta protección.
+  async function huellaDe(archivo) {
+    try {
+      const inicio = await archivo.slice(0, BYTES_HUELLA).arrayBuffer();
+      const tamano = new TextEncoder().encode(':' + archivo.size);
+      const datos = new Uint8Array(inicio.byteLength + tamano.length);
+      datos.set(new Uint8Array(inicio), 0);
+      datos.set(tamano, inicio.byteLength);
+      const resumen = await crypto.subtle.digest('SHA-256', datos);
+      return Array.from(new Uint8Array(resumen), (b) => b.toString(16).padStart(2, '0')).join('');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function leerHuellasSubidas() {
+    try { return JSON.parse(localStorage.getItem(CLAVE_SUBIDAS) || '[]'); } catch (_) { return []; }
+  }
+
+  function yaSubidaAntes(huella) {
+    return leerHuellasSubidas().includes(huella);
+  }
+
+  function recordarSubida(huella) {
+    if (!huella) return;
+    try {
+      const huellas = leerHuellasSubidas().filter((h) => h !== huella);
+      huellas.push(huella);
+      localStorage.setItem(CLAVE_SUBIDAS, JSON.stringify(huellas.slice(-HUELLAS_RECORDADAS)));
+    } catch (_) {}
   }
 
   // Reduce la foto a LADO_MAXIMO_PX en JPEG. Ante cualquier duda devuelve el original: nunca se
@@ -391,6 +495,7 @@
       error.definitivo = true; // un rechazo del servidor no se arregla reintentando
       throw error;
     }
+    return resultado;
   }
 
   // fetch con tope de espera; devuelve el JSON de la respuesta.
@@ -435,12 +540,16 @@
   }
 
   function cerrarLote() {
-    if (fallidos === 0) {
-      mostrarEstado(`¡Gracias! ${subidos === 1 ? 'Se subió 1 archivo' : `Se subieron ${subidos} archivos`} 💖`, 'gracias');
+    const nuevos = subidos === 1 ? 'Se subió 1 archivo' : `Se subieron ${subidos} archivos`;
+    const repetidos = yaEstaban === 1 ? '1 ya estaba subido' : `${yaEstaban} ya estaban subidos`;
+    if (fallidos > 0) {
+      mostrarEstado(`Se subieron ${subidos + yaEstaban} de ${totalLote}. Puedes volver a elegir los que fallaron.`, 'aviso');
+    } else if (subidos === 0) {
+      mostrarEstado(`${yaEstaban === 1 ? 'Ese archivo ya estaba subido' : 'Esos archivos ya estaban subidos'}. ¡Gracias! 💖`, 'gracias');
     } else {
-      mostrarEstado(`Se subieron ${subidos} de ${totalLote}. Puedes volver a elegir los que fallaron.`, 'aviso');
+      mostrarEstado(`¡Gracias! ${nuevos}${yaEstaban ? ` (${repetidos})` : ''} 💖`, 'gracias');
     }
-    subidos = fallidos = totalLote = 0;
+    subidos = yaEstaban = fallidos = totalLote = 0;
   }
 </script>
 </body>

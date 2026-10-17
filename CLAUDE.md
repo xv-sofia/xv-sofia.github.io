@@ -30,6 +30,16 @@ QR ─► https://xv-sofia.github.io/   docs/index.html (GitHub Pages, estática
   en `CacheService` por 6 h; antes de reintentar, la página consulta `GET ?id=` y si ya llegó no
   lo reenvía; y si igual llega un POST repetido, el script responde `repetido: true` sin guardar.
   La latencia de Google varía (de 5 a 23 s para una foto chica en la misma tarde).
+- **Huella por archivo** = SHA-256 de los primeros 4 MB + tamaño, en hex (64 caracteres). Se
+  usa como `idSubida` y se guarda en `localStorage` (`xv-sofia-subidas`, últimas 3000): si el
+  invitado cierra la página a mitad de camino y vuelve a elegir todo, las ya subidas aparecen
+  como "Ya estaba subida ✓" sin reenviarse. Si borró los datos del navegador, el script igual
+  las descarta durante 6 h (responde `repetido`). Sin verificar en iPhone: si iOS re-codifica
+  distinto la misma foto cada vez que se elige, la huella no coincide y se sube duplicada.
+- **Segundo plano:** una página web no sube con la app cerrada. En iPhone se congela a los
+  segundos de salir y sigue sola al volver; si se cierra la pestaña, lo pendiente se pierde.
+  Mitigación: aviso fijo arriba mientras sube + `navigator.wakeLock` (iOS 16.4+, Chrome
+  Android) para que la pantalla no se apague; se vuelve a pedir en `visibilitychange`.
 - Página y script son compatibles en cualquier orden de despliegue: sin `idSubida` el script
   guarda igual, y con el script viejo la consulta `?id=` devuelve la prueba de vida → se reenvía.
 - **Las fotos se reducen en el celular** a 2560 px / JPEG 0,85 antes de subir (solo si pasan de
