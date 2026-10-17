@@ -40,6 +40,12 @@ QR ─► https://xv-sofia.github.io/   docs/index.html (GitHub Pages, estática
   segundos de salir y sigue sola al volver; si se cierra la pestaña, lo pendiente se pierde.
   Mitigación: aviso fijo arriba mientras sube + `navigator.wakeLock` (iOS 16.4+, Chrome
   Android) para que la pantalla no se apague; se vuelve a pedir en `visibilitychange`.
+- **Safari/WebKit solo concede el primer wake lock con un toque reciente** (transient
+  activation); pedirlo después de elegir fotos fallaba en silencio en iPhone (probado por Kevin:
+  la pantalla se apagó a los 30 s). Por eso se pide en el `click` de "Elegir fotos"; una vez
+  concedido, los pedidos siguientes no necesitan toque. Respaldo: cualquier `click` mientras
+  sube lo vuelve a pedir. **`?diagnostico` en la URL** muestra el estado del wake lock y el
+  user agent en la página (Playwright/Chrome de escritorio no reproducen iOS).
 - Página y script son compatibles en cualquier orden de despliegue: sin `idSubida` el script
   guarda igual, y con el script viejo la consulta `?id=` devuelve la prueba de vida → se reenvía.
 - **Las fotos se reducen en el celular** a 2560 px / JPEG 0,85 antes de subir (solo si pasan de
